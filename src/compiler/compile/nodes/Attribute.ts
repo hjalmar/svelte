@@ -14,11 +14,12 @@ export default class Attribute extends Node {
 	start: number;
 	end: number;
 	scope: TemplateScope;
-
+	info: TemplateNode;
 	component: Component;
 	parent: Element;
 	name: string;
 	is_spread: boolean;
+	is_boolean: boolean;
 	is_true: boolean;
 	is_static: boolean;
 	expression?: Expression;
@@ -28,10 +29,11 @@ export default class Attribute extends Node {
 	constructor(component: Component, parent: Node, scope: TemplateScope, info: TemplateNode) {
 		super(component, parent, scope, info);
 		this.scope = scope;
-
+		this.info = info;
 		if (info.type === 'Spread') {
 			this.name = null;
 			this.is_spread = true;
+			this.is_boolean = undefined;
 			this.is_true = false;
 
 			this.expression = new Expression(component, this, scope, info.expression);
@@ -41,12 +43,13 @@ export default class Attribute extends Node {
 			this.is_static = false;
 		} else {
 			this.name = info.name;
+			this.is_boolean = typeof info.value == 'boolean';
 			this.is_true = info.value === true;
 			this.is_static = true;
 
 			this.dependencies = new Set();
 
-			this.chunks = this.is_true
+			this.chunks = this.is_boolean
 				? []
 				: info.value.map(node => {
 					if (node.type === 'Text') return node;
@@ -75,7 +78,9 @@ export default class Attribute extends Node {
 	}
 
 	get_value(block) {
-		if (this.is_true) return x`true`;
+		if (this.info.value === true) return x`true`;
+		if (this.info.value === false) return x`false`;
+
 		if (this.chunks.length === 0) return x`""`;
 
 		if (this.chunks.length === 1) {
@@ -98,8 +103,8 @@ export default class Attribute extends Node {
 	get_static_value() {
 		if (this.is_spread || this.dependencies.size > 0) return null;
 
-		return this.is_true
-			? true
+		return this.is_boolean
+			? this.info.value 
 			: this.chunks[0]
 				// method should be called only when `is_static = true`
 				? (this.chunks[0] as Text).data
