@@ -170,7 +170,7 @@ export default function tag(parser: Parser) {
 	const unique_names: Set<string> = new Set();
 
 	let attribute;
-	while ((attribute = read_attribute(parser, unique_names))) {
+	while ((attribute = read_attribute(parser, unique_names, element))) {
 		element.attributes.push(attribute);
 		parser.allow_whitespace();
 	}
@@ -291,7 +291,7 @@ function read_tag_name(parser: Parser) {
 	return name;
 }
 
-function read_attribute(parser: Parser, unique_names: Set<string>) {
+function read_attribute(parser: Parser, unique_names: Set<string>, element: TemplateNode) {
 	const start = parser.index;
 
 	function check_unique(name: string) {
@@ -348,6 +348,11 @@ function read_attribute(parser: Parser, unique_names: Set<string>) {
 		}
 	}
 
+	// track if a prop is logical not i.e `!prop`
+	let is_logical_not_prop : Boolean = false;
+	if (element.type === 'InlineComponent' && parser.eat('!')) {
+		is_logical_not_prop = true;
+	}
 	// eslint-disable-next-line no-useless-escape
 	const name = parser.read_until(/[\s=\/>"']/);
 	if (!name) return null;
@@ -359,7 +364,7 @@ function read_attribute(parser: Parser, unique_names: Set<string>) {
 	const colon_index = name.indexOf(':');
 	const type = colon_index !== -1 && get_directive_type(name.slice(0, colon_index));
 
-	let value: any[] | true = true;
+	let value: any[] | Boolean;
 	if (parser.eat('=')) {
 		parser.allow_whitespace();
 		value = read_attribute_value(parser);
@@ -369,6 +374,26 @@ function read_attribute(parser: Parser, unique_names: Set<string>) {
 			code: 'unexpected-token',
 			message: 'Expected ='
 		}, parser.index);
+	}
+
+	if (is_logical_not_prop) {
+		if (value !== undefined) {
+			parser.error({
+				code: 'unexpected-token',
+				message: `Logical NOT prop is only allowed on props without value`
+			}, parser.index);
+		}
+
+		if (type) {
+			parser.error({
+				code: 'unexpected-token',
+				message: `Logical NOT prop is not allowed on directive props`
+			}, parser.index);
+		}
+	}
+
+	if (value === undefined) {
+		value = !is_logical_not_prop;
 	}
 
 	if (type) {
